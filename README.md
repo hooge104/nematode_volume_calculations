@@ -3,7 +3,7 @@ Some quick calculations estimating the total soil nematode volume and comparing 
 
 ## Some assumptions:
 - Human bodyweight, on average: `50 kg`
-- Number of humans: `7.4B`
+- Number of humans: `7.4 B`
 - Body density humans: `985 kg/m3`
 
 ## Nematode community composition:
