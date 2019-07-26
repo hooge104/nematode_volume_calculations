@@ -1,0 +1,220 @@
+---
+title: "nematode volume calculations"
+author: "J. van den Hoogen & S. Giesen et al. 2019, doi: 10.1038/s41586-019-1418-6 "
+output:
+  html_document:
+    toc: yes
+    toc_collapse: no
+    toc_float: yes
+    theme: spacelab
+    fig_retina: 2
+  github_document: default
+---
+
+```{r load packages, results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+# Data import
+```{r}
+# Nemaplex data
+setwd("~/Work/ETH/Projects/Nematodes/Calculations")
+Nemaplex_data_raw <- read.csv("Family Ecophysiology qParameters.csv", stringsAsFactors = FALSE, fileEncoding = "latin1") 
+
+# Mulder 2011 data
+mulder_2011 <- read.csv("Mulder2011.csv")
+mulder_data <- mulder_2011 %>% 
+  select(trophic.group, Length, Width, Juv_Adult)
+
+# Biome abundances
+Biome_Abundances <- read.csv("20180827_Biome_Abundances.csv")
+
+adult_data_1 <- Nemaplex_data_raw %>% 
+  select(cp.value, feeding.code, Length.micm, Width.micm) %>% 
+  mutate(feeding.code = replace(feeding.code, feeding.code == "p", "Predators")) %>% 
+  mutate(feeding.code = replace(feeding.code, feeding.code == "o", "Omnivores")) %>% 
+  mutate(feeding.code = replace(feeding.code, feeding.code == "b", "Bacterivores")) %>% 
+  mutate(feeding.code = replace(feeding.code, feeding.code == "h", "Herbivores")) %>% 
+  mutate(feeding.code = replace(feeding.code, feeding.code == "f", "Fungivores")) %>% 
+  filter(feeding.code != "e") %>% 
+  filter(feeding.code != "d") %>% 
+  filter(feeding.code != "") %>% 
+  rename(trophic.group = feeding.code) %>% 
+  rename(Length = Length.micm) %>% 
+  rename(Width = Width.micm)
+
+cp.values <- adult_data_1 %>% group_by(trophic.group) %>% summarise(cp.value = mean(cp.value)) 
+
+mulder_data$trophic.group <- substr(mulder_data$trophic.group,1,4)  
+adult_data_2 <- mulder_data %>%   
+  mutate(trophic.group = replace(trophic.group, trophic.group == "bact", "Bacterivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "fung", "Fungivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "herb", "Herbivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "omni", "Omnivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "pred", "Predators")) %>% 
+  filter(Juv_Adult == "adult")
+adult_data_2 <- adult_data_2 %>% select(-Juv_Adult)
+adult_data_2 <- merge(cp.values, adult_data_2[1:3], by = "trophic.group")
+
+adult_data <- rbind(adult_data_1, adult_data_2)
+```
+
+# Bodymass calculations
+## Adults
+```{r}
+#mass as function of length and width: W = (L ∙D^2)/(1.6 ∙ 10^6 )
+adult_data$mass <- with(adult_data,(Length * Width * Width)/(1.6*1E6))
+# volume as function of length and width (assuming a cylinder shape): pi*r^2*length
+adult_data$volume <- with(adult_data,((pi * (0.5 * Width)^2 * Length))/1E15)
+
+summary_adult <- adult_data %>% 
+  group_by(trophic.group) %>% 
+  summarise(n.measurements = n(),
+            mean.mass.ug = mean(mass),
+            mean.volume.l = mean(volume)) %>% 
+  na.omit() 
+summary_adult
+
+```
+
+## Juveniles
+```{r}
+juv_data <- mulder_2011 %>% 
+  select(Taxonomy, trophic.group, Length, Width, Juv_Adult)
+
+juv_data$trophic.group <- substr(juv_data$trophic.group,1,4)  
+juv_data <- juv_data %>%   
+  mutate(trophic.group = replace(trophic.group, trophic.group == "bact", "Bacterivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "fung", "Fungivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "herb", "Herbivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "omni", "Omnivores")) %>% 
+  mutate(trophic.group = replace(trophic.group, trophic.group == "pred", "Predators")) %>% 
+  filter(Juv_Adult == "juveniles")
+
+#Mass as function of length and width: W = (L x D^2)/(1.6 x 10^6 )
+juv_data$mass <- with(juv_data, (Length * Width * Width)/(1.6*1E6))
+juv_data$volume <- with(juv_data,((pi * (0.5 * Width)^2 * Length))/1E15)
+
+summary_juv <- juv_data %>% 
+  group_by(trophic.group) %>% 
+  summarise(n.measurements = n(), 
+            mean.mass.ug = mean(mass),
+            mean.volume.l = mean(volume)) %>% 
+  na.omit() 
+summary_juv
+```
+# Number of nematodes per biome
+The numbers per biome are outputted from the geospatial models.
+```{r}
+#Import calculated totals of individuals
+numbers <- Biome_Abundances %>% 
+  select(-Total_Number) %>% 
+  gather(key, value, -Biome) %>% 
+  rename(trophic.group = key) %>% 
+  rename(Total.number = value)
+
+#Total number of individuals, per trophic group
+numbers_tot <- numbers %>% 
+  group_by(trophic.group) %>% 
+  summarise(tot.numb.indiv = sum(Total.number))
+
+#Total number of individuals, per trophic group
+numbers_tot_print <- numbers_tot  %>% 
+  rename("Trophic group" = 1) %>% 
+  rename("Number of individuals" = 2) %>% 
+  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
+numbers_tot_print
+
+```
+
+# Combined volume
+## Adults
+```{r}
+#Adults
+summary_tot_adult <- merge(summary_adult, numbers_tot, by = "trophic.group")
+#Total biomass in Gt: mean mass per trophic group x individuals
+summary_tot_adult$total.biomass.Gt <- with(summary_tot_adult, (summary_tot_adult$mean.mass.ug * summary_tot_adult$tot.numb.indiv)/1E21)
+#Total biomass in Gt C: biomass x 20% fresh mass x carbon content 52% of dry mass
+summary_tot_adult$total.Cbiomass.Gt <- with(summary_tot_adult, (summary_tot_adult$total.biomass.Gt * 0.2 * 0.52))
+#Total volume in litres: mean volume per trophic group x individuals
+summary_tot_adult$total.volume.l <- with(summary_tot_adult, (summary_tot_adult$mean.volume.l * summary_tot_adult$tot.numb.indiv))
+
+#Final output
+summary_tot_adult <- summary_tot_adult %>%  
+  select(trophic.group, tot.numb.indiv, total.biomass.Gt, total.Cbiomass.Gt, total.volume.l) %>% 
+  rename("Trophic group" = 1) %>% 
+  rename("Computed individuals" = 2) %>% 
+  rename("Fresh biomass (Gt)" = 3) %>% 
+  rename("Biomass (Gt C)" = 4) %>% 
+  rename("Volume (l)" = 5) %>% 
+  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
+
+summary_tot_adult[,-1] <- round(select_if(summary_tot_adult, is.numeric), 2)
+summary_tot_adult[,2] <- formatC(summary_tot_adult[,2], format = "e", digits = 2)
+summary_tot_adult
+```
+
+## Juveniles
+```{r}
+#Juveniles
+summary_tot_juv <- merge(summary_juv, numbers_tot, by = "trophic.group")
+#Total biomass in Gt: mean mass per trophic group x individuals
+summary_tot_juv$total.biomass.Gt <- with(summary_tot_juv, (summary_tot_juv$mean.mass.ug * summary_tot_juv$tot.numb.indiv)/1E21)
+#Total biomass in Gt C: biomass x 20% fresh mass x carbon content 52% of dry mass
+summary_tot_juv$total.Cbiomass.Gt <- with(summary_tot_juv, (summary_tot_juv$total.biomass.Gt * 0.2 * 0.52))
+#Total volume in litres: mean volume per trophic group x individuals
+summary_tot_juv$total.volume.l <- with(summary_tot_juv, (summary_tot_juv$mean.volume.l * summary_tot_juv$tot.numb.indiv))
+
+summary_tot_juv <- summary_tot_juv %>%  
+  select(trophic.group, tot.numb.indiv, total.biomass.Gt, total.Cbiomass.Gt, total.volume.l) %>% 
+  rename("Trophic group" = 1) %>% 
+  rename("Computed individuals" = 2) %>% 
+  rename("Fresh biomass (Gt)" = 3) %>% 
+  rename("Biomass (Gt C)" = 4) %>% 
+  rename("Volume (l)" = 5) %>% 
+  bind_rows(summarise_all(., funs(if(is.numeric(.)) sum(.) else "Total")))
+
+summary_tot_juv[,-1] <- round(select_if(summary_tot_juv, is.numeric), 2)
+summary_tot_juv[,2] <- formatC(summary_tot_juv[,2], format = "e", digits = 2)
+summary_tot_juv
+```
+
+## Total biomass van volume
+```{r}
+#Assuming a relative proportion of 30% adults and 70% juveniles
+adult_frac <- 0.30
+juv_frac <- 0.70
+
+#Multiply adult and juvenile summaries by relative proportions
+summary_tot_final <- summary_tot_juv[,1:2]
+summary_tot_final[3:5] <- ((adult_frac * summary_tot_adult[3:5]) + (juv_frac * summary_tot_juv[3:5])) 
+summary_tot_final[3:5] <- round(select_if(summary_tot_final[3:5], is.numeric), 2)
+summary_tot_final
+
+```
+
+#Comparing nematodes to humans
+```{r}
+#total nematode biomass (freshweight) in Gt:
+tot_nema_biomass <- summary_tot_final$`Fresh biomass (Gt)`[6]
+
+# Total nematode volume in l:
+tot_nema_volume <- summary_tot_final$`Volume (l)`[6]
+
+#Human biomass is calculated using assumptions from Bar-On et al. 2018 PNAS 
+#human population from 2015 UN data
+human_pop <- 7383008.82 * 1000 #https://esa.un.org/unpd/wpp/Download/Standard/Population/
+
+#Average human weight assumed at 50 kg by Hern et al. 1999 https://link.springer.com/article/10.1023/A:1022153110536
+human_weight <- 50
+# human body density 985 kg/m3, or 0.985 g/l
+body_volume <- 50/0.985
+human_biomass <- (human_pop * human_weight)/1E12
+human_volume <- human_pop * body_volume
+
+round((tot_nema_volume/human_volume),3)
+
+#nematode biomass as fraction of human biomass
+cat("Total soil nematode biomass represents", format(round((tot_nema_biomass/human_biomass*100), 1)),"% of total human biomass")
+```
+
