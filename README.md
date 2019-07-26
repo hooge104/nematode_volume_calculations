@@ -14,5 +14,5 @@ In total, there are `1337.603` Billion cans of worms on the planet.
 
 ### Nematode community composition:
 - Percentage of adult nematodes: `30%`
-- percentage of juveniles: `70%`
+- Percentage of juveniles: `70%`
 
