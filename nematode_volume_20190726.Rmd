@@ -212,9 +212,15 @@ body_volume <- 50/0.985
 human_biomass <- (human_pop * human_weight)/1E12
 human_volume <- human_pop * body_volume
 
-round((tot_nema_volume/human_volume),3)
+# Nematode volume as fraction of human volume
+cat("The volume of nematodes represents ", round((tot_nema_volume/human_volume),3)*100, "% of human volume.") 
+
+# Volume of one can (standard Campbell's soup)
+volume_can <- 0.284 
+
+# Number of cans to fit all nematodes 
+numb_can <- tot_nema_volume/volume_can
 
 #nematode biomass as fraction of human biomass
-cat("Total soil nematode biomass represents", format(round((tot_nema_biomass/human_biomass*100), 1)),"% of total human biomass")
-```
+cat("\n\nIn total, there are ", numb_can/1E9 ,"Billion cans of worms on the planet.")
 
